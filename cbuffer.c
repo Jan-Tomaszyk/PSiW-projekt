@@ -1,4 +1,7 @@
 #include "cbuffer.h"
+#include <math.h>
+#include <sys/param.h>
+#include <stdio.h>
 
 #ifndef MAX_ITEM_SIZE
 #define MAX_ITEM_SIZE (1 << 20)  // 1MB per item
@@ -6,6 +9,7 @@
 
 CBuffer* newbuf(int size)
 {
+	//printf("\ntworze newbuff %d\n", size);
     CBuffer* cb = malloc(sizeof(CBuffer));
     if (!cb) return NULL;
     cb->buffer = malloc(size * sizeof(void*));
@@ -19,61 +23,77 @@ CBuffer* newbuf(int size)
     cb->item_size = sizeof(void*);
     //size_t item_size=0;
     cb->head = cb->tail = 0;
+	//printf("\nstworzono newbuff %d\n", size);
     return cb;
 }
 
 void add(CBuffer* buf, void* el)
 {
+	//
     pthread_mutex_lock(&buf->buf_mut);
-    while ((buf->head + 1) % buf->capacity == buf->tail) 
+    printf("\ndodaje - lock\n");
+	while ((buf->head + 1) % buf->capacity == buf->tail) 
     {
-        //pthread_mutex_unlock(&buf->buf_mut);
+        //pthread_mutex_unlock(&buf->buf_mut);//?
         pthread_cond_wait(&buf->not_full, &buf->buf_mut);
     }
+	printf("\ndodaje - koniec czek\n");
     buf->buffer[buf->head] = el; // Stores the pointer directly
     buf->head = (buf->head + 1) % buf->capacity;
-    pthread_mutex_unlock(&buf->buf_mut);
-    pthread_cond_signal(&buf->not_empty);
+    	pthread_mutex_unlock(&buf->buf_mut);
+    	 printf("\ndodaje - unlock\n");
+	pthread_cond_signal(&buf->not_empty);
+	//printf("dodano el");
 }
 
 void* get(CBuffer* buf)
 {
+	//printf("\ngetting\n");
     while ((buf->head) == buf->tail) 
     {
         pthread_cond_wait(&buf->not_empty, &buf->buf_mut);
     }
+	//printf("\ngot\n");
     return buf->buffer[buf->tail];
 }
 
 void* pop(CBuffer* buf)
 {
+	//printf("\npoping\n");
     while ((buf->head) == buf->tail) 
     {
-        pthread_cond_wait(&buf->not_empty, &buf->buf_mut);
+        //pthread_cond_wait(&buf->not_empty, &buf->buf_mut);
     }
+	printf("\npoped\n");
     return buf->buffer[buf->head];
 }
 
 int del(CBuffer* buf, void* el)
 {
-    pthread_mutex_lock(&buf->buf_mut);
-    
+    //printf("\ndeling\n");
+	 pthread_mutex_lock(&buf->buf_mut);
+    printf("locked mut ");
     if (buf->head == buf->tail) {
         pthread_mutex_unlock(&buf->buf_mut);
-        return 0;
+        printf("notodel ");
+	return 0;
     }
     int current = buf->tail;
     while (current != buf->head)
     {
+	//printf("whil1 ");
         if (buf->buffer[current] == el)
         {
+		//printf("if1 ");
             int next = (current + 1) % buf->capacity;
             while (next != buf->head)
             {
+		//printf("whil2wej ");
                 buf->buffer[current] = buf->buffer[next];
                 current = next;
                 next = (next + 1) % buf->capacity;
             }
+		//printf("whil2wyj ")
             buf->head = (buf->head - 1) % buf->capacity;
             pthread_mutex_unlock(&buf->buf_mut);
             pthread_cond_signal(&buf->not_full);
@@ -82,6 +102,8 @@ int del(CBuffer* buf, void* el)
         current = (current + 1) % buf->capacity;
     }
     pthread_mutex_unlock(&buf->buf_mut);
+	printf("unlocked mut "); 
+	//printf("\ndeled\n");
     return 0;
 }
 
@@ -106,10 +128,13 @@ int count(CBuffer* buf)
     return licz;
 }
 */
-int count(CBuffer* buf) {
+int count(CBuffer* buf)
+{
+	 //printf("\ncounting\n");
     pthread_mutex_lock(&buf->buf_mut);
     int count = (buf->head - buf->tail + buf->capacity) % buf->capacity;
     pthread_mutex_unlock(&buf->buf_mut);
+	 //printf("\ncounted\n");
     return count;
 }
 
@@ -122,6 +147,7 @@ int count(CBuffer* buf) {
 
 void setsize(CBuffer* buf, int n)
 {
+	 //printf("\nseting size %d\n", n);
     pthread_mutex_lock(&buf->buf_mut);
     
     int old_capacity = buf->capacity;
@@ -152,15 +178,17 @@ void setsize(CBuffer* buf, int n)
     {
         pthread_cond_broadcast(&buf->not_full);
     }*/
+	//printf("\nseted size %d\n", n);
 }
 
 int append(CBuffer* buf, CBuffer* buf2)
 {
+	//printf("\nappending\n");
     pthread_mutex_lock(&buf->buf_mut);
     pthread_mutex_lock(&buf2->buf_mut);
     int transferred = 0;
     int available = buf->capacity - count(buf);
-    int to_transfer = min(available, count(buf2));
+    int to_transfer = MIN(available, count(buf2));
 
     while(transferred < to_transfer)
     {
@@ -178,12 +206,13 @@ int append(CBuffer* buf, CBuffer* buf2)
         pthread_cond_signal(&buf->not_empty);
         pthread_cond_signal(&buf2->not_full);
     }
-
+	//printf("\nappended\n");
     return transferred;
 }
 
 void destroy(CBuffer* buf)
 {
+	//printf("\ndestroying\n");
     if(!buf) return;
 
     pthread_mutex_lock(&buf->buf_mut);
@@ -196,5 +225,6 @@ void destroy(CBuffer* buf)
     pthread_mutex_destroy(&buf->buf_mut);
 
     free(buf->buffer); // Safe even if NULL
-    free(buf);        
+    free(buf);
+	//printf("\ndestroyed\n");
 }
