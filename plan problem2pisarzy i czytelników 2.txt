@@ -1,0 +1,63 @@
+Zaległe na PSiW, opracować raz jeszcze.
+PSIW - Problem 2pisarzy:
+
+Przeczytać uważnie wszysytko o mutexach i zmiennych warunkowych - najpierw w ćwiczeniowym, potem sprawdzić wykład, potem programy, porównać z dotychczasowym rozwiązaniem, jeśli nie będę widział błędu spróbować skonstruować od nowa, być może na bazie semeforowego.
+
+notatki:
+kompilowanie programów wielowątkowych poprzedzamy: cc -pthread program.c
+
+mutex = zamek
+zmienne warunkowe (ang. conditional variables) - wymienione jako osobny mechanizm(wniosek: zamki nie implikują zmiennych warunkowych)
+zamki:
+pthread_mutex_init() – inicjowanie zamka. Drugi argument wywołania jest wskaźnikiem na strukturę pthread_mutexattr_t opisującą początkowe atrybuty zamka. Zamek z domyślnymi atrybutami można utworzyć przekazując pusty wskaźnik.
+pthread_mutex_lock() – zajęcie zamka (opuszczenie semafora). Funkcja jest blokująca jeżeli zamek przed jej wywołaniem był zajęty.
+pthread_mutex_trylock() – zajęcie wolnego zamka. Próba zajęcia już zajętego zamka
+kończy się zasygnalizowaniem błędu (kod błędu EBUSY).
+pthread_mutex_unlock() – zwolnienie zamka (podniesienie semafora). Zwolnienia
+powinien dokonać wątek, który zajął zamek.
+pthread_mutex_destroy() – usunięcie zamka.
+
+9.4.2 Zmienne warunkowe
+Kontrola, zasypianie i budzenie wątków gdy zachodzi zdarzenie. Pozwalają na tworzenie "monitorów".
+
+funkcje:
+pthread_cond_init() – inicjowanie zmiennej warunkowej. Podobnie jak w przypadku zamków można przekazać jako argument adres struktury reprezentującej
+początkowe atrybuty zmiennej warunkowej.
+pthread_cond_wait() – oczekuje bezwarunkowo do czasu odebrania sygnału budzącego. Przez „sygnał” należy rozumieć tu wewnętrzny mechanizm synchronizacyjny biblioteki pthread, a nie sygnały przedstawione w rozdziale 4.
+pthread_cond_timedwait() – oczekiwanie na wybudzenie ograniczone czasowo. Przekroczenie czasu oczekiwania sygnalizowane jest błędem ETIMEDOUT.
+pthread_cond_signal() – wysłanie sygnału budzącego do wątków oczekujących na wskazanej zmiennej warunkowej. Sygnał powoduje wybudzenie co najmniej jednego wątku.
+pthread_cond_broadcast() – wysłanie sygnałów budzących do wszystkich wątków oczekujących na wskazanej zmiennej warunkowej.
+
+Usypianie wątków wymaga użycia jednocześnie zmiennej warunkowej i zamka. Przed
+zaśnięciem zamek musi być już zajęty. Zaśnięcie oznacza atomowe zwolnienie zamka
+i rozpoczęcie oczekiwania na sygnał budzący. Obudzenie wątku powoduje ponowne
+zajęcie zamka. 
+//w oczekującym?
+pthread_cond_t c;
+pthread_mutex_t m;
+
+w oczekującym:
+pthread_mutex_lock(&m); // zajęcie zamka
+pthread_cond_wait(&c, &m); // oczekiwanie na zmiennej warunkowej
+pthread_mutex_unlock(&m); // zwolnienie zamka
+
+wątek budzący
+pthread_mutex_lock(&m); // zajęcie zamka
+pthread_cond_wait(&c, &m); // oczekiwanie na zmiennej warunkowej
+pthread_mutex_unlock(&m); // zwolnienie zamka
+
+
+obecne rozwiązanie - błędy:
+Pańska odpowiedź:
+"Rozwiązanie jest zupełnie niepoprawne. W ogóle nie użył Pan zmiennych warunkowych. Są one niezbędne do realizacji kontrolowanego zasypiania i wybudzania. Proszę to opracować jeszcze raz. Wystarczy pseudokod."
+
+moja analiza:
+nie wykorzystanie typu "pthread_cond" do tworzenia zmiennych warunkowych
+Jedyne co jest bliskie bycia zmienną warunkową to "ile_czyta"
+brak odniesienia do jakiejkolwiek zmiennej w pisarzu
+liczenie tylko czytelników,
+robienie warunków ifami, a nie wybudzeniami
+być może: tworzenie tablicy wątków i uruchamianie ich iteracyjnie(raczej nie)
+
+Jak skończę laby PO.
+O 21-22 zająć się PA.

@@ -1,0 +1,119 @@
+#dodanie bibliotek
+
+int const max_pisz=2;
+//deklaracje zmiennych
+
+int ile_czyt = 0;
+pthread_cond_t czy_czyta = PTHREAD_COND_INITIALIZER;
+pthread_mutex_t czytanie = PTHREAD_MUTEX_INITIALIZER;
+
+int ile_pisz = 0
+pthread_cond_t czy_pisze = PTHREAD_COND_INITIALIZER;
+pthread_cond_t miejsce_na_pisanie = PTHREAD_COND_INITIALIZER;
+pthread_mutex_t pisanie = PTHREAD_MUTEX_INITIALIZER;
+
+//pthread_mutex_t pisanieZew = PTHREAD_MUTEX_INITIALIZER;
+
+
+void monitor()
+{
+        FILE *log = fopen("access_log.txt", "a");
+        time_t now;
+        time(&now);
+        fprintf(log, "[%.19s] Aktywni pisarze: %d; Aktywni czytelnicy: %d\n", ctime(&now), ile_czyta, ile_pisze);
+        fclose(log);
+}
+
+//procedury procesów
+void pisarz()
+{
+        while (1)
+        {
+                //oczekiwanie na brak czytelników i nie za dużą liczbę pisarzy
+                pthread_mutex_lock(&pisanie);
+                while (ile_czyt > 0 || ile_pisz >= max_pisz)
+                {
+                        if (ile_czyt > 0)
+                        {
+                                pthread_cond_wait(&czy_czyta, &pisanie);
+                        }
+                        else
+                        {
+                                pthread_cond_wait(miejsce_na_pisanie, &pisanie);
+                        }
+                }
+                ile_pisz++;//blokowanie czytelników
+                pthread_mutex_unlock(&pisanie);
+                monitor();
+
+                writeZrodlo();            // Odbywa się pisanie
+
+                pthread_mutex_lock(&pisanie);
+                ile_pisz--;
+                pthread_cond_signal(&miejsce_na_pisanie);
+                if (ile_pisz==0)
+                {
+                        pthread_cond_broadcast(&czy_pisze);
+                }
+                pthread_mutex_unlock(&pisanie);
+        }
+}
+
+
+void czytelnik()
+{
+        while (1)
+        {
+                //oczekiwanie na brak pisarzy
+                pthread_mutex_lock(&czytanie);
+                while (ile_pisz > 0)
+                {
+                        pthread_cond_wait(&czy_pisze, &czytanie);
+                }
+                pthread_mutex_unlock(&czytanie);
+                ile_czyt++;//blokowanie pisarzy
+
+                readzrodlo();           //odbywa się czytanie
+
+
+                pthread_mutex_lock(&czytanie);
+
+                ile_czyt--;
+                if (ile_czyt == 0)
+                {
+                        pthread_mutex_lock(&pisanie);
+                        pthread_cond_signal(&czy_czyta);
+                        pthread_mutex_unlock(&pisanie);
+                }
+                pthread_mutex_unlock(&czytanie);
+        }
+}
+
+
+
+"główna część":
+{
+        alokuj tabliceWątków
+
+        for (int i = 0; i < ile_czytaczy; i++)
+        {
+                stwórz wątekCzyt;//przypisując do niego funkcję
+        }
+        for (int i = 0; i < ile_pisarzy; i++)
+        {
+                stwórz wątekPisz;//przypisując do niego funkcję
+        }
+        //uruchomienie procesów
+        for (int i = 0; i < ile_czytaczy; i++)
+        {
+                uruchom(wątekCzyt);
+        }
+        for (int i = 0; i < ile_pisarzy; i++)
+        {
+                uruchom(wątekPisz);
+        }
+
+        zwolnienie(tabliceWątków);
+        zniszczenie(pisanie);
+        zniszczenie(czytanie);
+}

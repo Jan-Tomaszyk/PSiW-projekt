@@ -1,0 +1,75 @@
+#dodanie bibliotek
+
+//deklaracje zmiennych
+
+int ile_czytaczy, ile_pisarzy;
+int ile_czyta = 0;
+
+inicjuj zasobMutex;
+inicjuj czytelMutex;
+
+
+//procedury procesów
+void pisarz()
+{
+
+        while (1)
+        {
+                zasobMutex.blokowanie();
+                writezrodlo();            // Odbywa się pisanie
+                zasobMutex.odblokowanie();
+        }
+}
+
+void czytelnik()
+{
+        while (1)
+        {
+                czytelMutex.blokowanie()
+                ile_czyta++;//czytelnik więcej
+                if (ile_czyta == 1)//blokujemy jeśli zasoby zaczeły być potrzebne
+                {
+                        &zasobMutex.blokowanie();
+                }
+                czytelMutex.odblokowanie();
+
+                readzrodlo();           //odbywa się czytanie
+
+                czytelMutex.blokowanie();
+                ile_czyta--;//czytelnik mniej
+                if (ile_czyta == 0)//odblokowujemy jeśli zasoby przestały być potrzebne
+                {
+                        zasobMutex.odblokowanie();
+                }
+                czytelMutex.odblokowanie();
+        }
+}
+
+
+
+"główna część":
+{
+        alokuj tabliceWątków
+
+        for (int i = 0; i < ile_czytaczy; i++)
+        {
+                stwórz wątekCzyt;//przypisując do niego funkcję
+        }
+        for (int i = 0; i < ile_pisarzy; i++)
+        {
+                stwórz wątekPisz;//przypisując do niego funkcję
+        }
+        //uruchomienie procesów
+        for (int i = 0; i < ile_czytaczy; i++)
+        {
+                uruchom(wątekCzyt);
+        }
+        for (int i = 0; i < ile_pisarzy; i++)
+        {
+                uruchom(wątekPisz);
+        }
+
+        zwolnienie(tabliceWątków);
+        zniszczenie(zasobMutex);
+        zniszczenie(czytelMutex);
+}

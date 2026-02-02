@@ -1,0 +1,109 @@
+czytelników_i_2_pisarzy_mutex
+zamki(mutexy):
+inicjowanie
+zajęcie(blokujące)
+zajęcie(próbne)
+zwolnienie
+zniszczenie
+
+
+8.3.1. - zastosowanie semafor do synchronizacji dostępu do bloku pamięci dzielonej
+nieznane funkcjn e: 
+sem_open() - stworzenie lub otwarcie semafory
+sem_wait - dekrementuje(blokuje) semaforę w argumencie, jeśli wartość semafory >0 funkcja od razu zwraca, jeśli 0 to wywoływanie bloków jest zablokowane do czasu zwiększenie jej powyżej 0, chyba, że wywołanie przerwą sygnały
+sem_post - inkrementuje(odblokowuje) semaforę w argumencie, jeśli wartość będzie większa od zera zakończ blokowanie przez wywołanie sem_wait
+usleep - jak sleep, liczy w mikrosekundach
+sem_destroy - niszczy nienazwaną semaforę, powinna być stworzona przez sem_init
+munmap - tworzy mapowanie w wirtualnej przestrzeni procesu.
+
+sem_init - inicjuje semaforę na podaną wartość
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <sys/mman.h>
+#include <string.h>
+#include <semaphore.h>
+
+#define BUF_SIZE 4096
+#define N 3
+
+int main()
+{
+        sem_t *Sr;
+        int pid;
+        Sr = sem_open("/readers", O_CREAT, 0600, N);
+        if (Sr == SEM_FAILED)
+        {
+                perror("sem_open");
+                exit(1);
+        }
+        pid = getpid();
+        while(1) {
+                sem_wait(Sr);
+                printf("Process %d enters CS\n", pid);
+                usleep(1000000);
+                printf(" %d leaves CS\n", pid);
+                sem_post(Sr);
+                usleep(1000000);
+        }
+        sem_destroy(Sr);
+        munmap(Sr, sizeof(Sr));
+}
+
+wersja bez głodzenia(zaimplementuj i zaprojektuj na jej podstawie wersję dla dwóch):
+int ilosc_czytelnikow;                  // inicjalizuj do 0
+
+// wszystkie semafory zainicjalizowane 1
+semafor zrodlo;       
+semafor ilosc_czytelnikow;      
+semafor kolejka;         
+
+void pisarz()
+{
+    kolejka.wait();          
+    // <ENTER>
+    zrodlo.wait();         
+    // </ENTER>
+    kolejka.post();           
+
+    // <PISZ>
+    writezrodlo();            // Odbywa się pisanie
+    // </PISZ>
+
+    // <EXIT>
+    zrodlo.post();         
+    // </EXIT>
+}
+
+void czytelnik()
+{
+    kolejka.wait();           
+    ilosc_czytelnikow.wait();        
+    // <ENTER>
+    if (ilosc_czytelnikow == 0)         
+        zrodlo.wait();     
+    ilosc_czytelnikow++;               
+    // </ENTER>
+    kolejka.post();           
+    ilosc_czytelnikow.post();       
+
+    // <READ>
+    readzrodlo();             
+    // </READ>
+
+    ilosc_czytelnikow.wait();        
+    // <EXIT>
+    ilosc_czytelnikow--;                
+    if (ilosc_czytelnikow == 0)        
+        zrodlo.post();    
+    // </EXIT>
+    ilosc_czytelnikow.post();        
+}
+
+8.3.5 w pseudokodzie:
+
+
+zacznij od skopiowania obecnego kodu, potem z,modyfikuj wedle algorytmu, wymyśl zmianę algorytmu dla dwóch pisarzy.
+
