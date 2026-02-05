@@ -9,8 +9,8 @@
 
 
 #include <pthread.h>
-#include <stdlib.h>  
-//#include <stdio.h>   
+#include <stdlib.h>
+//#include <stdio.h>
 
 
 typedef struct {
@@ -22,11 +22,13 @@ typedef struct
 {
     void** buffer;      // Data storage
     size_t capacity;   // Max elements
+//realna maksymalna liczba to capacity-1
     int head;       // Write position
     int tail;       // Read position
     size_t item_size; // Always sizeof(void*)
     pthread_mutex_t buf_mut;
     pthread_cond_t not_full;
+    pthread_cond_t only_full;
     pthread_cond_t not_empty;
 } CBuffer;
 
@@ -48,4 +50,4 @@ int append(CBuffer* buf, CBuffer* buf2);
 
 void destroy(CBuffer* buf);
 
-#endif	// CBUFFER_H
+#endif  // CBUFFER_H
