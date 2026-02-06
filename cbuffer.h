@@ -13,10 +13,6 @@
 //#include <stdio.h>
 
 
-typedef struct {
-    size_t size;
-    void* data;
-} TaggedElement;
 
 typedef struct
 {

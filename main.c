@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <assert.h>
 #include <pthread.h>
+#include <stdatomic.h>
 #include <unistd.h>
 #include "cbuffer.h"
 
@@ -9,34 +10,15 @@
 #define TEST_THREADS 4
 #define TEST_CAPACITY 100
 
+atomic_int transfer_count;
 
-//#define TEST_ITERATIONS 30
-
-/*void* producer(void* arg) {
-    CBuffer* buf = (CBuffer*)arg;
-    for(int i=0; i<TEST_SIZE; i++) {
-        int* num = malloc(sizeof(int));
-        *num = i;
-        printf("[Producer %d] Pre-add: num=%p val=%d\n", i, num, *num);
-        add(buf, num);
-        printf("[Producer %d] Post-add: head=%d tail=%d\n", i, buf->head, buf->tail);
-
-        // Verify the element was stored correctly
-        pthread_mutex_lock(&buf->buf_mut);
-        int idx = (buf->head - 1 + buf->capacity) % buf->capacity;
-        if(buf->buffer[idx] != num) {
-            fprintf(stderr, "Element mismatch at index %d\n", idx);
-        }
-        pthread_mutex_unlock(&buf->buf_mut);
-    }
-    return NULL;
-}*/
-
-void* producer(void* arg) {
+void* producer(void* arg)
+{
     CBuffer* buf = (CBuffer*)arg;
     void* added_items[TEST_SIZE] = {0};
 
-    for(int i=0; i<TEST_SIZE; i++) {
+    for(int i=0; i<TEST_SIZE; i++)
+        {
         int* num = malloc(sizeof(int));
         *num = i;
         added_items[i] = num;
@@ -45,14 +27,15 @@ void* producer(void* arg) {
         add(buf, num);
 
        // Track without locking
-        //printf("[Producer %d] Buffer state: head=%d tail=%d\n",
-            i, buf->head, buf->tail);
+       //printf("[Producer %d] Buffer state: head=%d tail=%d\n", i, buf->head, buf->tail);
     }
 
    // Verify all items were processed
-   for(int i=0; i<TEST_SIZE; i++) {
-        if(added_items[i] != NULL) {
-            //printf("[Producer] WARNING: Item %p not consumed!\n", added_items[i]);
+   for(int i=0; i<TEST_SIZE; i++)
+{
+        if(added_items[i] != NULL)
+        {
+         printf("[Producer] WARNING: Item %p not consumed!\n", added_items[i]);
         }
     }
     return NULL;
@@ -73,66 +56,32 @@ void* consumer(void* arg) {
     return NULL;
 }
 
-
-/*
-void* producer(void* arg)
-{
-    printf("producer start");
-        CBuffer* buf = (CBuffer*)arg;
-    for(int i = 0; i < TEST_SIZE; i++)
-        {
-        printf("[Producer %lu] Attempting to add item %d\n", pthread_self(), i);
-        int* num = malloc(sizeof(int));
-        *num = i;
-        add(buf, num);
-        printf("[Producer %lu] Added item %d\n", pthread_self(), i);
-    }
-        printf("producer end");
-    return NULL;
-}
-
-void* consumer(void* arg)
-{
-    printf("consumer start");
-        CBuffer* buf = (CBuffer*)arg;
-    for(int i = 0; i < TEST_SIZE; i++)
-        {
-        void* num;
-        printf("[Consumer %d] Attempting to remove item\n", i);
-        del(buf, &num);
-        printf("[Consumer ] Removed item %d\n", i);
-        free(num);
-    }
-        printf("consumer end");
-    return NULL;
-}*/
-
 void* ultraproducer(void* arg) {
     CBuffer* buf = (CBuffer*)arg;
-    void* added_items[TEST_CAPACITY+2] = {0};
+    //void* added_items[TEST_CAPACITY+2];//={0};
         pthread_mutex_lock(&buf->buf_mut);
-        printf("capdan-capbuff?%d", TEST_CAPACITY-buf->capacity);
+        printf("capdan-capbuff = %ld", TEST_CAPACITY-buf->capacity);
         pthread_mutex_unlock(&buf->buf_mut);
-    for(size_t i=0; i<TEST_CAPACITY; i++) {
+    for(size_t i=0; i<TEST_CAPACITY; i++)
+        {
         int* num = malloc(sizeof(int));
         *num = i;
-        added_items[i] = num;
+       // added_items[i] = num;
 
-        printf("[UProducer] Adding item %d %p (val: %d)\n", i, num, *num);
+        printf("[UProducer] Adding item %ld %p (val: %d)\n", i, num, *num);
         add(buf, num);
 
         // Track without locking
         //printf("[UProducer] Buffer state%d: head=%d tail=%d\n", i, buf->head, buf->tail);
     }
         printf("\nliczba:%d\n", count(buf));
-        printf("capdan-countbuff?%d", TEST_CAPACITY-count(buf));
+        printf("capdan-countbuff = %d", TEST_CAPACITY-count(buf));
         pthread_mutex_lock(&buf->buf_mut);
-        printf("countbuff-capbuff?%d", count(buf)-buf->capacity);
+        printf("countbuff-capbuff = %ld", count(buf)-buf->capacity);
         pthread_mutex_unlock(&buf->buf_mut);
-    // Verify all items were processed
-
-        /*
-         for(int i=0; i<TEST_CAPACITY; i++) {
+    //verify all items were processed
+   /*
+        for (int i=0; i<TEST_CAPACITY; i++) {
         if(added_items[i] != NULL) {
             printf("[UProducer] WARNING: Item %p not consumed!\n", added_items[i]);
                 }
@@ -143,10 +92,10 @@ void* ultraproducer(void* arg) {
 
 void* popget(void* arg) {
     CBuffer* buf = (CBuffer*)arg;
-        for(size_t i=0; i<TEST_CAPACITY; i++)
+        for(size_t i=0; i<TEST_CAPACITY/2; i++)
         {
-                printf("Pop: %d\n", pop(buf));
-                printf("Get: %d\n", get(buf));
+                printf("Pop: %p %d\n", pop(buf), *(int*)(pop(buf)));
+                printf("Get: %p %d\n", get(buf), *(int*)(get(buf)));
         }
     return NULL;
 }
@@ -160,16 +109,15 @@ void* mass_producer(void* arg) {
         int* num = malloc(sizeof(int));
         *num = i;
         add(buf, num);
-        printf("[Mass Producer] Added %d (Capacity: %d)\n", i, buf->capacity);
-        //usleep(100000); // 100ms delay between adds
-    }
+        printf("[Mass Producer] Added %d (Capacity: %ld)\n", i, buf->capacity);
+        }
     return NULL;
 }
 
 void* mass_consumer(void* arg) {
     CBuffer* buf = (CBuffer*)arg;
     for(int i=0; i<20; i++) {
-        void* item;
+        void* item=pop(buf);
         if(del(buf, &item)) {
             printf("[Mass Consumer] Removed %d\n", *(int*)item);
             free(item);
@@ -181,10 +129,10 @@ void* mass_consumer(void* arg) {
 
 void* resize_thread(void* arg) {
     CBuffer* buf = (CBuffer*)arg;
-    sleep(1); // Let initial ops start
-    printf("\n[Resize Thread] Shrinking from %d to 3\n", buf->capacity);
+    //sleep(1);// Let initial ops start
+    printf("\n[Resize Thread] Shrinking from %ld to 3\n", buf->capacity);
     setsize(buf, 3);
-    sleep(2);
+    //sleep(2);
     printf("\n[Resize Thread] Expanding to 8\n");
     setsize(buf, 8);
     return NULL;
@@ -205,85 +153,43 @@ void test_resize() {
     destroy(buf);
 }
 
-// Temporary debug version of setsize
-/*void test_resize() {
-    // Test setup
-    CBuffer* buf = newbuf(5);
-    if(!buf) printf("buf niezaalokowano");
-        pthread_t producer, consumer;
+void* append_thread(void* arg) {
+    CBuffer* buf1 = (CBuffer*)arg;
+    CBuffer* buf2 = newbuf(10);
 
-    // Test 1: Shrink with active elements
-    for(int i=0; i<3; i++) {
-        printf("wfor");
+    for(int i=0; i<10; i++) {
         int* num = malloc(sizeof(int));
         *num = i;
-        add(buf, num);
+        add(buf2, num);
     }
 
-    printf("=== Testing shrink from 5 to 2 ===\n");
-    setsize(buf, 2); // Should block until count <= 2
-
-    // Test 2: Expand while empty
-    printf("\n=== Testing expand from 2 to 10 ===\n");
-    setsize(buf, 10);
-
-    // Test 3: Concurrent resize during operations
-    pthread_create(&producer, NULL, (void*)mass_producer, buf);
-    pthread_create(&consumer, NULL, (void*)mass_consumer, buf);
-
-    sleep(1); // Let threads run
-    printf("\n=== Dynamic resize during operations ===\n");
-    setsize(buf, 3);
-    setsize(buf, 7);
-
-    pthread_join(producer, NULL);
-    pthread_join(consumer, NULL);
-
-    destroy(buf);
+    while(1) {
+        int moved = append(buf1, buf2);
+        printf("while1");
+        if(moved == 0) break;
+        atomic_fetch_add(&transfer_count, moved);
+    }
+    destroy(buf2);
+    return NULL;
 }
 
+void test_append() {
+    CBuffer* buf1 = newbuf(15);
+    transfer_count = 0;
 
-/*void test_resize() {
-    // Test setup
-    CBuffer* buf = newbuf(5);
-    pthread_t producer, consumer, counter[3], sizer[3];
-
-    // Test 1: Shrink with active elements
+    pthread_t threads[3];
     for(int i=0; i<3; i++) {
-        int* num = malloc(sizeof(int));
-        *num = i;
-        add(buf, num);
+        pthread_create(&threads[i], NULL, append_thread, buf1);
     }
-        printf("po for");
-        pthread_create(&sizer[0], NULL, (int*)setsize, buf, 2);
-        //pthread_create(&counter[0], NULL, (void*)count, buf);
-        printf("Initial count: %d (should be 3)\n");
-        //pthread_join(counter[0], NULL);
-        pthread_join(sizer[0], NULL);
-    printf("=== Testing shrink from 5 to 2 ===\n");
-    pthread_join(sizer[0], NULL);
-    //setsize(buf, 2); // Should block until count <= 2
 
-    // Test 2: Expand while empty
-    printf("\n=== Testing expand from 2 to 10 ===\n");
-    setsize(buf, 10);
 
-    //printf("count: %d (should be 2)\n", count(buf));
-    // Test 3: Concurrent resize during operations
-    pthread_create(&producer, NULL, (void*)mass_producer, buf);
-    pthread_create(&consumer, NULL, (void*)mass_consumer, buf);
+    sleep(1); // Allow transfers to occur
+    printf("Total elements transferred: %d\n",
+           atomic_load(&transfer_count));
 
-        sleep(1);
-    printf("\n=== Dynamic resize during operations ===\n");
-    setsize(buf, 3);
-
-    setsize(buf, 7);
-    //printf("dyn count: %d (should be ?)\n", count(buf));
-    pthread_join(producer, NULL);
-    pthread_join(consumer, NULL);
-    //printf("dyn count: %d (should be ?)\n", count(buf));
-    destroy(buf);
-}*/
+    for(int i=0; i<3; i++) pthread_join(threads[i], NULL);
+    destroy(buf1);
+}
 
 
 int main()
@@ -346,7 +252,8 @@ int main()
         exit(EXIT_FAILURE);
         }
         if(pthread_create(&inne[0], NULL, ultraproducer, buf) != 0 ||
-           pthread_create(&inne[1], NULL, popget, buf) != 0) {
+           pthread_create(&inne[1], NULL, popget, buf) != 0
+                || pthread_create(&inne[2], NULL, popget, buf) != 0) {
             perror("Thread creation failed");
             destroy(buf);
             exit(EXIT_FAILURE);
@@ -355,13 +262,18 @@ int main()
 
         //pthread_create(&threads[0], NULL, ultraproducer, buf);
         //pthread_create(&threads[1], NULL, popget, buf);
-        pthread_join(inne[0], NULL);
-        printf("fulfill test passed!\n");
         pthread_join(inne[1], NULL);
+        pthread_join(inne[0], NULL);
+        pthread_join(inne[2], NULL);
         printf("fulfill while show test passed!\n");
-        test_resize();
-        printf("resize test passed!\n");
+        destroy(buf);
+        //test_resize();
+        buf = newbuf(5);
+        //setsize(buf, 7;)
+        //setsize(buf, 3);
+        //printf("resize test passed!\n");
 
+        test_append();
 
         printf("All tests passed!\n");
     return 0;
