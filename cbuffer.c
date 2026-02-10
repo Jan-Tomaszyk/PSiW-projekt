@@ -69,9 +69,9 @@ void* pop(CBuffer* buf)
         //printf("\npoping\n");
     while ((buf->head) == buf->tail)
     {
-        //pthread_cond_wait(&buf->not_empty, &buf->buf_mut);
+        pthread_cond_wait(&buf->not_empty, &buf->buf_mut);
     }
-        printf("\npoped\n");
+        //printf("\npoped\n");
     return buf->buffer[(buf->head-1)%buf->capacity];
 }
 
@@ -82,7 +82,7 @@ int del(CBuffer* buf, void* el)
 
     // Empty buffer case
     if(buf->head == buf->tail) {
-        printf("brak elementu");
+        //printf("brak elementu");
         pthread_mutex_unlock(&buf->buf_mut);
         return 0;
     }
@@ -120,7 +120,7 @@ int del(CBuffer* buf, void* el)
         }
         else
         {
-                printf("brak elementu");
+                //printf("brak elementu");
         }
 
     return found;
@@ -147,7 +147,7 @@ int count(CBuffer* buf)
 // Temporary debug version of setsize
 void setsize(CBuffer* buf, int n)
 {
-        printf("[DEBUG] Entering setsize(%d)\n", n);
+        //printf("[DEBUG] Entering setsize(%d)\n", n);
 
         //static __thread int lock_depth = 0;
         //if(lock_depth++==0)
@@ -160,13 +160,13 @@ void setsize(CBuffer* buf, int n)
 
         if(pthread_mutex_timedlock(&buf->buf_mut, &timeout) != 0)
         {
-                printf("Failed to acquire mutex after %d seconds", d);
+                //printf("Failed to acquire mutex after %d seconds", d);
                 return;
         }
         //lock_owned = 1;
 
         //}
-            printf("[DEBUG] Acquired mutex\n");
+            //printf("[DEBUG] Acquired mutex\n");
 
         int old_capacity = buf->capacity;
     buf->capacity = n;
@@ -178,7 +178,7 @@ void setsize(CBuffer* buf, int n)
         {
                 while(count(buf) > n)
                 {
-                        printf("[DEBUG] Waiting (count=%d, new_cap=%d)\n", count(buf), n);
+                        //printf("[DEBUG] Waiting (count=%d, new_cap=%d)\n", count(buf), n);
                         pthread_cond_broadcast(&buf->not_empty);
                         pthread_cond_wait(&buf->only_full, &buf->buf_mut);
                         //pthread_cond_wait(&buf->not_full, &buf->buf_mut);
@@ -194,7 +194,7 @@ void setsize(CBuffer* buf, int n)
         //lock_owned = 0;
         //}
         //pthread_mutex_unlock(&buf->buf_mut);
-    printf("[DEBUG] Released mutex\n");
+    //printf("[DEBUG] Released mutex\n");
 }
 
 int append(CBuffer* buf, CBuffer* buf2)
@@ -219,6 +219,7 @@ int append(CBuffer* buf, CBuffer* buf2)
 
     if(transferred > 0)
     {
+        pthread_cond_signal(&buf->only_full);
         pthread_cond_signal(&buf->not_empty);
         pthread_cond_signal(&buf2->not_full);
     }
@@ -228,14 +229,15 @@ int append(CBuffer* buf, CBuffer* buf2)
 
 void destroy(CBuffer* buf)
 {
-        printf("\ndestroying\n");
-    if(!buf) {printf("nothing to free");return;}
-        printf("locking ");
+        //printf("\ndestroying\n");
+    if(!buf) {//printf("nothing to free");return;}
+        //printf("locking ");
     pthread_mutex_lock(&buf->buf_mut);
+    pthread_cond_signal(&buf->only_full);
     pthread_cond_broadcast(&buf->not_full);
     pthread_cond_broadcast(&buf->not_empty);
     pthread_mutex_unlock(&buf->buf_mut);
-        printf("unlocked ");
+        //printf("unlocked ");
     pthread_cond_destroy(&buf->not_full);
     pthread_cond_destroy(&buf->not_empty);
     pthread_mutex_destroy(&buf->buf_mut);
@@ -247,13 +249,13 @@ void destroy(CBuffer* buf)
                 {
                         free(buf->buffer[i]);
                 }
-                printf("freeing buffer");
+                //printf("freeing buffer");
                 free(buf->buffer); // Safe even if NULL
-                printf("buffer freed");
+                //printf("buffer freed");
         }
-        printf("freeing buf");
+        //printf("freeing buf");
     free(buf);
-        printf("buf freed");
-                printf("\ndestroyed\n");
+        //printf("buf freed");
+                //printf("\ndestroyed\n");
 }
 

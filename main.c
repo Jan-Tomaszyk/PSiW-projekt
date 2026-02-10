@@ -130,7 +130,9 @@ void* mass_consumer(void* arg) {
 void* resize_thread(void* arg) {
     CBuffer* buf = (CBuffer*)arg;
     //sleep(1);// Let initial ops start
+    pthread_mutex_lock(&buf->buf_mut);
     printf("\n[Resize Thread] Shrinking from %ld to 3\n", buf->capacity);
+    pthread_mutex_unlock(&buf->buf_mut);
     setsize(buf, 3);
     //sleep(2);
     printf("\n[Resize Thread] Expanding to 8\n");
@@ -195,7 +197,7 @@ void test_append() {
 int main()
 {
     CBuffer* buf = newbuf(TEST_CAPACITY);
-        printf("second create test passed!\n");
+        printf("create test passed!\n");
 
     pthread_t threads[TEST_THREADS*2];
     for(int i=0; i<TEST_THREADS; i++) {
@@ -267,7 +269,7 @@ int main()
         pthread_join(inne[2], NULL);
         printf("fulfill while show test passed!\n");
         destroy(buf);
-        //test_resize();
+        test_resize();
         buf = newbuf(5);
         //setsize(buf, 7;)
         //setsize(buf, 3);
