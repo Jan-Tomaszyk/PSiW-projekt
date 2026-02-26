@@ -17,11 +17,14 @@
 typedef struct
 {
     void** buffer;      // Data storage
-    size_t capacity;   // Max elements
-//realna maksymalna liczba to capacity-1
+    size_t capacity;   // Actual buffer size (for modulo operations, unchanged during setsize)
+    size_t limit;      // Effective capacity for add() blocking (changed immediately in setsize)
+    size_t pending_min_limit;  // Minimum limit among all pending setsize calls
+    int setsizes_in_progress; // Flag to indicate how many a setsize operation is in progress
     int head;       // Write position
     int tail;       // Read position
-    size_t item_size; // Always sizeof(void*)
+    //size_t item_size; // Always sizeof(void*)
+    size_t count;     // Current item count
     pthread_mutex_t buf_mut;
     pthread_cond_t not_full;
     pthread_cond_t only_full;
@@ -39,6 +42,8 @@ void* pop(CBuffer* buf);
 int del(CBuffer* buf, void* el);
 
 int count(CBuffer* buf);
+
+int _count_nolock(CBuffer* buf);
 
 void setsize(CBuffer* buf, int n);
 
