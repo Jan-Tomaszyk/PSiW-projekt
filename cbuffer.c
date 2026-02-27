@@ -60,11 +60,11 @@ void add(CBuffer* buf, void* el)
             pthread_cond_wait(&buf->not_full, &buf->buf_mut);
         }
         ////printf("\ndodaje - koniec czek\n");
-    printf("[DEBUG] add(): head=%d, capacity=%ld\n", buf->head, buf->capacity);
+    //printf("[DEBUG] add(): head=%d, capacity=%ld\n", buf->head, buf->capacity);
     buf->buffer[buf->head] = el; // Stores the pointer directly
     buf->head = (buf->head + 1) % buf->capacity;
     buf->count++;
-    printf("[DEBUG] add() done: new_head=%d, count=%ld\n", buf->head, buf->count);
+    //printf("[DEBUG] add() done: new_head=%d, count=%ld\n", buf->head, buf->count);
         pthread_cond_signal(&buf->not_empty);
         pthread_mutex_unlock(&buf->buf_mut);
         ////printf("\ndodaje - unlock\n");
@@ -79,15 +79,14 @@ void* get(CBuffer* buf)
     {
         pthread_cond_wait(&buf->not_empty, &buf->buf_mut);
     }
-    printf("[DEBUG] get(): tail=%d, capacity=%ld\n", 
-           buf->tail, buf->capacity);
+    //printf("[DEBUG] get(): tail=%d, capacity=%ld\n", buf->tail, buf->capacity);
     void* el = buf->buffer[buf->tail];
     /* Clear the slot to avoid leaving stale pointers in the buffer
        which could later be double-freed by destroy(). */
     buf->buffer[buf->tail] = NULL;
     buf->tail = (buf->tail + 1) % buf->capacity;
     buf->count--;
-    printf("[DEBUG] get() done: new_tail=%d, count=%ld\n", buf->tail, buf->count);
+    //printf("[DEBUG] get() done: new_tail=%d, count=%ld\n", buf->tail, buf->count);
     pthread_cond_signal(&buf->only_full);
     pthread_cond_signal(&buf->not_full);
     pthread_mutex_unlock(&buf->buf_mut);
@@ -103,17 +102,17 @@ void* pop(CBuffer* buf)
     {
         pthread_cond_wait(&buf->not_empty, &buf->buf_mut);
     }
-    printf("[DEBUG] pop(): tail=%d, capacity=%ld\n", buf->tail, buf->capacity);
+    //printf("[DEBUG] pop(): tail=%d, capacity=%ld\n", buf->tail, buf->capacity);
     int idx = (buf->head - 1 + buf->capacity) % buf->capacity;
     void* el = buf->buffer[idx];
     buf->buffer[idx] = NULL;
     buf->head = idx;
     buf->count--;
-    printf("[DEBUG] pop() done: new_head=%d, count=%ld\n", buf->head, buf->count);
+    //printf("[DEBUG] pop() done: new_head=%d, count=%ld\n", buf->head, buf->count);
     pthread_cond_signal(&buf->only_full);
     pthread_cond_signal(&buf->not_full);
     pthread_mutex_unlock(&buf->buf_mut);
-        ////printf("\npoped\n");
+        //////printf("\npoped\n");
     return el;
 }
 
@@ -193,47 +192,46 @@ int count(CBuffer* buf)
 
 void setsize(CBuffer* buf, int n)
 {
-        printf("[DEBUG] Entering setsize(%d)\n", n);
+        //printf("[DEBUG] Entering setsize(%d)\n", n);
 
         pthread_mutex_lock(&buf->buf_mut);
         
         buf->setsizes_in_progress++;
         // CRITICAL: Capture old values at entry
         int old_capacity = buf->capacity;
-        int old_tail = buf->tail;  // CRITICAL: Must capture tail here!
+        //int old_tail = buf->tail;  // old version captures tail here!
         int old_limit = buf->limit;
         int old_pending_min_limit = buf->pending_min_limit;
         
-        printf("[DEBUG] Captured: old_capacity=%d, old_tail=%d, old_limit=%d, old_pending_min_limit=%d, new_limit=%d, count=%ld, head=%d\n", 
-               old_capacity, old_tail, old_limit, old_pending_min_limit, n, buf->count, buf->head);
+        //printf("[DEBUG] Captured: old_capacity=%d, old_tail=%d, old_limit=%d, old_pending_min_limit=%d, new_limit=%d, count=%ld, head=%d\n",//old_capacity, old_tail, old_limit, old_pending_min_limit, n, buf->count, buf->head);
 
         // Step 1: Update pending_min_limit to track the minimum among all ongoing setsize calls
         //buf->limit = n;  // Update limit immediately to unblock add() if expanding
         if (n < buf->pending_min_limit)
         {
             buf->pending_min_limit = n;
-            printf("[DEBUG] Updated pending_min_limit to %d\n", n);
+            //printf("[DEBUG] Updated pending_min_limit to %d\n", n);
         }
 
         // Step 2: Wait for buffer to have count <= new_limit (if shrinking)
         if (n < old_limit || n < old_capacity)
         {
-            printf("[DEBUG] Shrinking: waiting for count <= %d\n", n);
+            //printf("[DEBUG] Shrinking: waiting for count <= %d\n", n);
             while(buf->count > n)
             {
-                printf("[DEBUG] Waiting (count=%ld, target=%d)\n", buf->count, n);
+                //printf("[DEBUG] Waiting (count=%ld, target=%d)\n", buf->count, n);
                 pthread_cond_broadcast(&buf->not_empty);
                 pthread_cond_wait(&buf->only_full, &buf->buf_mut);
             }
-            printf("[DEBUG] Count is now <= %d\n", n);
+            //printf("[DEBUG] Count is now <= %d\n", n);
         }
 
         // Step 3: Check if reallocation is needed
         if (n == old_capacity)
         {
-            printf("[DEBUG] New size equals old capacity, no reallocation needed\n");
+            //printf("[DEBUG] New size equals old capacity, no reallocation needed\n");
             buf->limit = n;
-            printf("[DEBUG] Committed: limit=%d\n", n);
+            //printf("[DEBUG] Committed: limit=%d\n", n);
             pthread_mutex_unlock(&buf->buf_mut);
             return;
         }
@@ -242,33 +240,32 @@ void setsize(CBuffer* buf, int n)
         void** new_buffer = malloc(n * sizeof(void*));
         if (!new_buffer) {
             // ROLLBACK: Restore pending_min_limit if malloc fails
-            printf("[DEBUG] malloc() failed - rolling back\n");
+            //printf("[DEBUG] malloc() failed - rolling back\n");
             buf->pending_min_limit = old_pending_min_limit;
             pthread_cond_broadcast(&buf->not_full);
             pthread_mutex_unlock(&buf->buf_mut);
             return;  
         }
-        printf("[DEBUG] Allocated new buffer for size %d\n", n);
+        //printf("[DEBUG] Allocated new buffer for size %d\n", n);
 
         // Step 5: Copy items using captured old_capacity and old_tail (safe - they're local copies!)
         for(int i = 0; i < buf->count; i++) {
             int old_idx = (buf->tail + i) % old_capacity;
             void* item = buf->buffer[old_idx];
             new_buffer[i] = item;
-            printf("[DEBUG] Copy item[%d]: old_idx=%d\n", i, old_idx);
+            //printf("[DEBUG] Copy item[%d]: old_idx=%d\n", i, old_idx);
         }
-        printf("[DEBUG] Copied %ld items from old_buffer (capacity=%d, tail=%d) to new_buffer (capacity=%d)\n", buf->count, old_capacity, buf->tail, n);
+        //printf("[DEBUG] Copied %ld items from old_buffer (capacity=%d, tail=%d) to new_buffer (capacity=%d)\n", buf->count, old_capacity, buf->tail, n);
 
         // Step 6: Commit (buf_mut held throughout, so serialized)
-        printf("[DEBUG] Before commit: freeing old_buffer\n");
+        //printf("[DEBUG] Before commit: freeing old_buffer\n");
         free(buf->buffer);
         buf->buffer = new_buffer;
         buf->capacity = n;  
         buf->limit = n;     
         buf->tail = 0;
         buf->head = buf->count % buf->capacity;  // Wrap head to valid range
-        printf("[DEBUG] Committed: old_buffer freed, capacity=%ld, limit=%ld, tail=0, head=%d, count=%ld\n", 
-               buf->capacity, buf->limit, buf->head, buf->count);
+        //printf("[DEBUG] Committed: old_buffer freed, capacity=%ld, limit=%ld, tail=0, head=%d, count=%ld\n", //buf->capacity, buf->limit, buf->head, buf->count);
 
         // Step 7: Signal waiters
         pthread_cond_broadcast(&buf->only_full);
@@ -281,26 +278,27 @@ void setsize(CBuffer* buf, int n)
         if (buf->setsizes_in_progress == 0)
         {
             buf->pending_min_limit = INT_MAX; // Reset when no setsize in progress
-            printf("[DEBUG] All setsize operations complete, reset pending_min_limit\n");
+            //printf("[DEBUG] All setsize operations complete, reset pending_min_limit\n");
         }
         else
         {
             buf->pending_min_limit = MIN(buf->pending_min_limit, n); // Update to the next minimum if there are still setsize operations
-            printf("[DEBUG] setsize operations still in progress: %d\n", buf->setsizes_in_progress);
+            //printf("[DEBUG] setsize operations still in progress: %d\n", buf->setsizes_in_progress);
         }
         pthread_mutex_unlock(&buf->buf_mut);
-        printf("[DEBUG] Resize complete\n");
+        //printf("[DEBUG] Resize complete\n");
 }
 
 int append(CBuffer* buf, CBuffer* buf2)
 {
-        printf("\nappending\n");
+    //printf("\nappending\n");
+    if(!buf || !buf2) return 0;
     pthread_mutex_lock(&buf->buf_mut);
     pthread_mutex_lock(&buf2->buf_mut);
     int transferred = 0;
     int available = buf->capacity - _count_nolock(buf);
     int to_transfer = MIN(available, _count_nolock(buf2));
-    printf("[DEBUG] Available space in buf1: %d, items in buf2: %d, will transfer: %d\n",available, _count_nolock(buf2), to_transfer);
+    //printf("[DEBUG] Available space in buf1: %d, items in buf2: %d, will transfer: %d\n",available, _count_nolock(buf2), to_transfer);
     while(transferred < to_transfer)
     {
         void* el = buf2->buffer[buf2->tail];
@@ -311,23 +309,24 @@ int append(CBuffer* buf, CBuffer* buf2)
         buf->count++;
         buf2->count--;
     }
-    pthread_mutex_unlock(&buf2->buf_mut);
-    pthread_mutex_unlock(&buf->buf_mut);
 
     if(transferred > 0)
     {
         pthread_cond_signal(&buf->not_empty);
-        pthread_cond_signal(&buf->only_full);
+        //pthread_cond_signal(&buf->only_full);
         pthread_cond_signal(&buf2->only_full);
         pthread_cond_signal(&buf2->not_full);
     }
-        printf("\nappended\n");
+    pthread_mutex_unlock(&buf2->buf_mut);
+    pthread_mutex_unlock(&buf->buf_mut);
+
+        //printf("\nappended\n");
     return transferred;
 }
 
 void destroy(CBuffer* buf)
 {
-    printf("\nDestroying buffer\n");
+    //printf("\nDestroying buffer\n");
     if(!buf)
     {
         return;
@@ -353,21 +352,21 @@ void destroy(CBuffer* buf)
         {
                 for(int i = buf->tail; i != ((buf->tail + buf->count) % buf->capacity); i = (i+1) % buf->capacity)
                 {
-                    printf("trying to free element at index %d\n", i);
+                    //printf("trying to free element at index %d\n", i);
                     if (buf->buffer[i] != NULL)
                     {
-                        printf("freeing %d element\n", i);
+                        //printf("freeing %d element\n", i);
                         free(buf->buffer[i]);
-                        printf("freed %d element\n", i);
+                        //printf("freed %d element\n", i);
                     }
                 }
-                printf("freeing buffer");
+                //printf("freeing buffer");
                 free(buf->buffer); // Safe even if NULL
-                printf("buffer freed");
+                //printf("buffer freed");
         }
-        printf("freeing buf");
+        //printf("freeing buf");
     free(buf);
-        printf("buf freed");
-    printf("\ndestroyed\n");
+        //printf("buf freed");
+    //printf("\ndestroyed\n");
 }
 

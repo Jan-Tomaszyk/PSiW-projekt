@@ -514,7 +514,8 @@ void test_append_single_item() {
     destroy(buf2);
     printf("PASS test_append_single_item\n");
 }
-
+//SI TESTY Z KONKURENCJĄ
+// Test append: concurrent producers and consumers
 void* producer_thread(void* arg) {
     CBuffer* buf2 = (CBuffer*)arg;
     for(int i=0; i<13; i++) {
@@ -531,19 +532,15 @@ void* consumer_thread(void* arg) {
     int local_count = 0;
     for(int i=0; i<45; i++)
     {
-        if(count(params->buf2) == 0)
+        pthread_mutex_lock(&params->buf2->buf_mut);
+        while(_count_nolock(params->buf2) == 0)
         {
-            // Wait for items to be added to buf2
-            pthread_mutex_lock(&params->buf2->buf_mut);
-            while(count(params->buf2) == 0)
-            {
-                pthread_cond_wait(&params->buf2->not_empty, &params->buf2->buf_mut);
-            }
-            pthread_mutex_unlock(&params->buf2->buf_mut);
+            pthread_cond_wait(&params->buf2->not_empty, &params->buf2->buf_mut);
         }
+        pthread_mutex_unlock(&params->buf2->buf_mut);
         int moved = append(params->buf1, params->buf2);
         printf("[Consumer %lx] Moved %d items\n", pthread_self(), moved);
-        if(params->total>0 && (moved == 0 || count(params->buf2) == 0)) 
+        if(params->total>0 && (moved == 0 || count(params->buf2) == 0 || count(params->buf1) == params->buf1->capacity)) 
         {local_count += moved; break;}
         local_count += moved;
     }
@@ -571,6 +568,54 @@ void test_proper_concurrency() {
            count(buf1), count(buf2), atomic_load(&total_transferred));
     assert(atomic_load(&total_transferred) == count(buf1));
 }
+
+void* append_thread1(void* arg) {
+    CBuffer* buf = (CBuffer*)arg;
+    CBuffer* other = newbuf(10);
+    for(int i=0; i<100; i++) append(buf, other);
+    return NULL;
+}
+void* append_thread2(void* arg) {
+    CBuffer* buf = (CBuffer*)arg;
+    CBuffer* other = newbuf(10);
+    for(int i=0; i<100; i++) append(other, buf);
+    return NULL;
+}
+
+void test_append_lock_order() {
+    CBuffer* buf1 = newbuf(10);
+    CBuffer* buf2 = newbuf(10);
+    
+    // Fill buf2 with test data
+    for(int i=0; i<5; i++) {
+        int* num = malloc(sizeof(int));
+        *num = i;
+        add(buf2, num);
+    }
+
+    // Test append in both directions
+    printf("Transfer buf2->buf1...\n");
+    int transferred = append(buf1, buf2);
+    assert(transferred == 5);
+    assert(count(buf1) == 5);
+    assert(count(buf2) == 0);
+
+    printf("Transfer buf1->buf2...\n");
+    transferred = append(buf2, buf1);
+    assert(transferred == 5);
+    assert(count(buf2) == 5);
+    assert(count(buf1) == 0);
+
+    // Verify no deadlock occurs
+    pthread_t threads[4];
+    for(int i=0; i<4; i++) {
+        pthread_create(&threads[i], NULL, 
+            i%2 ? (void*)append_thread1 : (void*)append_thread2,
+            (i%2) ? (void*)buf1 : (void*)buf2);
+    }
+    for(int i=0; i<4; i++) pthread_join(threads[i], NULL);
+}
+
 
 // Test del(): verify element shifting after deletion
 void test_del_shifts_elements() {
@@ -1244,13 +1289,17 @@ int main()
         test_append_single_item();
         printf("append egde test passed!\n");
 
+        printf("\n========== SI TESTY ==========\n");
         test_proper_concurrency();
         printf("append concurrency test passed!\n");
 
         test_del_shifts_elements();
         printf("del shifting test passed!\n");
         
-        printf("testy od pana!\n");
+        test_append_lock_order();
+        printf("append lock order test passed!\n");
+
+        printf("====================Testy od pana!=====================\n");
         setsi_Test_prosty();
         printf("setsi Test prosty passed!\n");
         
