@@ -293,34 +293,34 @@ int append(CBuffer* buf, CBuffer* buf2)
 {
     //printf("\nappending\n");
     if(!buf || !buf2) return 0;
-    CBuffer* first = (buf < buf2) ? buf : buf2;
-    CBuffer* second = (buf < buf2) ? buf2 : buf;
-    pthread_mutex_lock(&first->buf_mut);
-    pthread_mutex_lock(&second->buf_mut);
+    //CBuffer* first = (buf < buf2) ? buf : buf2;
+    //CBuffer* second = (buf < buf2) ? buf2 : buf;
+    pthread_mutex_lock(&buf->buf_mut);
+    pthread_mutex_lock(&buf2->buf_mut);
     int transferred = 0;
-    int available = first->capacity - _count_nolock(first);
-    int to_transfer = MIN(available, _count_nolock(second));
-    //printf("[DEBUG] Available space in buf1: %d, items in buf2: %d, will transfer: %d\n",available, _count_nolock(second), to_transfer);
+    int available = buf->capacity - _count_nolock(buf);
+    int to_transfer = MIN(available, _count_nolock(buf2));
+    //printf("[DEBUG] Available space in buf1: %d, items in buf2: %d, will transfer: %d\n",available, _count_nolock(buf2), to_transfer);
     while(transferred < to_transfer)
     {
-        void* el = second->buffer[second->tail];
-        first->buffer[first->head] = el;
-        first->head = (first->head + 1) % first->capacity;
-        second->tail = (second->tail + 1) % second->capacity;
+        void* el = buf2->buffer[buf2->tail];
+        buf->buffer[buf->head] = el;
+        buf->head = (buf->head + 1) % buf->capacity;
+        buf2->tail = (buf2->tail + 1) % buf2->capacity;
         transferred++;
-        first->count++;
-        second->count--;
+        buf->count++;
+        buf2->count--;
     }
 
     if(transferred > 0)
     {
-        pthread_cond_broadcast(&first->not_empty);
+        pthread_cond_broadcast(&buf->not_empty);
         //pthread_cond_signal(&buf->only_full);
-        pthread_cond_broadcast(&second->only_full);
-        pthread_cond_broadcast(&second->not_full);
+        pthread_cond_broadcast(&buf2->only_full);
+        pthread_cond_broadcast(&buf2->not_full);
     }
-    pthread_mutex_unlock(&second->buf_mut);
-    pthread_mutex_unlock(&first->buf_mut);
+    pthread_mutex_unlock(&buf2->buf_mut);
+    pthread_mutex_unlock(&buf->buf_mut);
 
         //printf("\nappended\n");
     return transferred;
