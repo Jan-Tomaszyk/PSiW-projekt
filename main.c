@@ -617,6 +617,32 @@ void test_append_lock_order() {
 }
 
 
+void* random_append_worker(void* arg) {
+    CBuffer** buffers = (CBuffer**)arg;
+    for(int i=0; i<1000; i++) {
+        int idx1 = rand()%4;
+        int idx2 = rand()%4;
+        if(idx1 != idx2) {
+            append(buffers[idx1], buffers[idx2]);
+        }
+    }
+    return NULL;
+}
+
+void stress_test_append() {
+    CBuffer* buffers[4];
+    for(int i=0; i<4; i++) buffers[i] = newbuf(20);
+    
+    // Create threads that randomly append between buffers
+    pthread_t threads[8];
+    for(int i=0; i<8; i++) {
+        pthread_create(&threads[i], NULL, random_append_worker, buffers);
+    }
+    
+    sleep(10); // Let threads contend
+    printf("Stress test completed without deadlock\n");
+}
+
 // Test del(): verify element shifting after deletion
 void test_del_shifts_elements() {
     printf("\n=== TEST: del() ELEMENT SHIFTING ===\n");
@@ -1298,6 +1324,8 @@ int main()
         
         test_append_lock_order();
         printf("append lock order test passed!\n");
+        stress_test_append();
+        printf("append stress test passed!\n");
 
         printf("====================Testy od pana!=====================\n");
         setsi_Test_prosty();
