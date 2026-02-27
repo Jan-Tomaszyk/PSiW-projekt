@@ -89,7 +89,18 @@ void* popget(void* arg) {
     CBuffer* buf = (CBuffer*)arg;
         for(size_t i=1; i<TEST_CAPACITY/2; i++)
         {
+                printf("[PopGet] Iteration %ld: count=%d\n", i, count(buf));
+                if (count(buf)==0)
+                {
+                    break;
+                }
                 void* p = pop(buf);
+                if (count(buf)==0)
+                {
+                    if(p) printf("Pop: %p %d\n", p, *(int*)(p));
+                    if(p) free(p);
+                    break;
+                }
                 void* g = get(buf);
                 if(p) printf("Pop: %p %d\n", p, *(int*)(p));
                 if(g) printf("Get: %p %d\n", g, *(int*)(g));
@@ -206,7 +217,7 @@ void test_resize() {
     destroy(buf);
     printf("\n[test Thread] koniec\n");
 }
-/*
+
 void* append_thread(void* arg) {
     printf("\n[Append Thread] Starting append thread\n");
     CBuffer* buf1 = (CBuffer*)arg;
@@ -249,7 +260,7 @@ void test_append()
     for(int i=0; i<3; i++) pthread_join(threads[i], NULL);
     destroy(buf1);
 }
-*/
+
 // ===== EDGE CASE TESTS =====
 
 // Test setsize: expand (shrink is already tested in test_resize)
@@ -502,6 +513,63 @@ void test_append_single_item() {
     destroy(buf1);
     destroy(buf2);
     printf("PASS test_append_single_item\n");
+}
+
+void* producer_thread(void* arg) {
+    CBuffer* buf2 = (CBuffer*)arg;
+    for(int i=0; i<13; i++) {
+        int* num = malloc(sizeof(int));
+        *num = i;
+        add(buf2, num);
+        printf("[Producer %lx] Added %d\n", pthread_self(), i);
+    }
+    return NULL;
+}
+
+void* consumer_thread(void* arg) {
+    struct { CBuffer* buf1; CBuffer* buf2; atomic_int* total; }* params = arg;
+    int local_count = 0;
+    for(int i=0; i<45; i++)
+    {
+        if(count(params->buf2) == 0)
+        {
+            // Wait for items to be added to buf2
+            pthread_mutex_lock(&params->buf2->buf_mut);
+            while(count(params->buf2) == 0)
+            {
+                pthread_cond_wait(&params->buf2->not_empty, &params->buf2->buf_mut);
+            }
+            pthread_mutex_unlock(&params->buf2->buf_mut);
+        }
+        int moved = append(params->buf1, params->buf2);
+        printf("[Consumer %lx] Moved %d items\n", pthread_self(), moved);
+        if(params->total>0 && (moved == 0 || count(params->buf2) == 0)) 
+        {local_count += moved; break;}
+        local_count += moved;
+    }
+    atomic_fetch_add(params->total, local_count);
+    return NULL;
+}
+
+void test_proper_concurrency() {
+    CBuffer* buf1 = newbuf(15);
+    CBuffer* buf2 = newbuf(30);
+    atomic_int total_transferred = 0;
+    
+    // Pass shared buffers to threads
+    struct { CBuffer* buf1; CBuffer* buf2; atomic_int* total; } consumer_params = {buf1, buf2, &total_transferred};
+
+    pthread_t producers[2], consumers[2];
+    for(int i=0; i<2; i++) pthread_create(&producers[i], NULL, producer_thread, buf2);
+    for(int i=0; i<2; i++) pthread_create(&consumers[i], NULL, consumer_thread, &consumer_params);
+
+    sleep(1); // Let threads contend
+    for(int i=0; i<2; i++) pthread_join(producers[i], NULL);
+    for(int i=0; i<2; i++) pthread_join(consumers[i], NULL);
+    
+    printf("Final counts: buf1=%d, buf2=%d, transferred=%d\n", 
+           count(buf1), count(buf2), atomic_load(&total_transferred));
+    assert(atomic_load(&total_transferred) == count(buf1));
 }
 
 // Test del(): verify element shifting after deletion
@@ -893,7 +961,6 @@ void* setsi_Test_T5_T0(void* arg) {
     b = get(buf);
     printf("[T5-T0] Got b=%d\n", *b);
     
-    //pthread_barrier_wait(&args->barrier);  // Sync: T2 setsize done
     //printf("[T5-T0] After barrier: T2 setsize done\n");
     
     c = get(buf);
@@ -902,6 +969,9 @@ void* setsi_Test_T5_T0(void* arg) {
     d = get(buf);
     printf("[T5-T0] Got d=%d\n", *d);
     
+    pthread_barrier_wait(&args->barrier);  // Sync: T2 setsize done
+    printf("[T5-T0] After barrier: T2 setsize done\n");
+    //
     e = get(buf);
     printf("[T5-T0] Got e=%d\n", *e);
     
@@ -924,12 +994,11 @@ void* setsi_Test_T5_T1(void* arg) {
     CBuffer* buf = args->buf;
     //CBuffer* buf = (CBuffer*)arg;
     
+    pthread_barrier_wait(&args->barrier);  // Wait for T0 to add items    
     printf("[T5-T1] Starting: calling setsize(3)\n");
-    pthread_barrier_wait(&args->barrier);  // Wait for T0 to add items
-    
     setsize(buf, 3);
     printf("[T5-T1] setsize(3) complete, capacity=%ld\n", buf->capacity);
-    
+    pthread_barrier_wait(&args->barrier);  // Wait for T0 to add items    
     int* h = malloc(sizeof(int)); *h = 8;
     add(buf, h);
     printf("[T5-T1] Added h=8\n");
@@ -945,12 +1014,11 @@ void* setsi_Test_T5_T2(void* arg) {
     CBuffer* buf = args->buf;
     //CBuffer* buf = (CBuffer*)arg;
     
-    printf("[T5-T2] Starting: calling setsize(5)\n");
     pthread_barrier_wait(&args->barrier);  // Wait for T0 to add items
-    
+    printf("[T5-T2] Starting: calling setsize(5)\n");
     setsize(buf, 5);
     printf("[T5-T2] setsize(5) complete, capacity=%ld\n", buf->capacity);
-    
+    pthread_barrier_wait(&args->barrier);  // Wait for T0 to add items    
     int* g = malloc(sizeof(int)); *g = 7;
     add(buf, g);
     printf("[T5-T2] Added g=7\n");
@@ -1008,8 +1076,8 @@ void* setsi_Test_T6_T0(void* arg) {
     b = pop(buf);
     printf("[T6-T0] Popped b=%d\n", *b);
     
-    //pthread_barrier_wait(&args->barrier);  // Sync: T2 setsize done
-    //printf("[T6-T0] After barrier: T2 setsize done\n");
+    pthread_barrier_wait(&args->barrier);  // Sync: T2 setsize done
+    printf("[T6-T0] After barrier: T2 setsize done\n");
     
     int* d = pop(buf);
     printf("[T6-T0] Popped d=%d, count=%d (expected 1)\n", *d, count(buf));
@@ -1031,7 +1099,7 @@ void* setsi_Test_T6_T1(void* arg) {
     setsize(buf, 2);
     printf("[T6-T2] setsize(2) complete, capacity=%ld\n", buf->capacity);
     
-    //pthread_barrier_wait(&args->barrier);  // Notify T0
+    pthread_barrier_wait(&args->barrier);  // Notify T0
     printf("[T6-T2] Finished\n");
     return NULL;
 }
@@ -1048,6 +1116,7 @@ void* setsi_Test_T6_T2(void* arg) {
     int* d = malloc(sizeof(int)); *d = 4;
     add(buf, d);
     printf("[T6-T3] Added d=4\n");
+    pthread_barrier_wait(&args->barrier);  // Notify T0 that d is added
     printf("[T6-T3] Finished\n");
     return NULL;
 }
@@ -1158,9 +1227,9 @@ int main()
         //setsize(buf, 3);
         printf("resize test passed!\n");
 
-        //test_append();
+        test_append();
         
-        //printf("append test passed!\n");
+        printf("append test passed!\n");
 
         printf("\n========== EDGE CASE TESTS ==========\n");
         test_setsize_expand();
@@ -1174,7 +1243,10 @@ int main()
         test_append_partial();
         test_append_single_item();
         printf("append egde test passed!\n");
-        
+
+        test_proper_concurrency();
+        printf("append concurrency test passed!\n");
+
         test_del_shifts_elements();
         printf("del shifting test passed!\n");
         

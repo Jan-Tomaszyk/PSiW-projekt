@@ -60,8 +60,7 @@ void add(CBuffer* buf, void* el)
             pthread_cond_wait(&buf->not_full, &buf->buf_mut);
         }
         ////printf("\ndodaje - koniec czek\n");
-    printf("[DEBUG] add(): head=%d, capacity=%ld\n", 
-           buf->head, buf->capacity);
+    printf("[DEBUG] add(): head=%d, capacity=%ld\n", buf->head, buf->capacity);
     buf->buffer[buf->head] = el; // Stores the pointer directly
     buf->head = (buf->head + 1) % buf->capacity;
     buf->count++;
@@ -104,11 +103,13 @@ void* pop(CBuffer* buf)
     {
         pthread_cond_wait(&buf->not_empty, &buf->buf_mut);
     }
+    printf("[DEBUG] pop(): tail=%d, capacity=%ld\n", buf->tail, buf->capacity);
     int idx = (buf->head - 1 + buf->capacity) % buf->capacity;
     void* el = buf->buffer[idx];
     buf->buffer[idx] = NULL;
     buf->head = idx;
     buf->count--;
+    printf("[DEBUG] pop() done: new_head=%d, count=%ld\n", buf->head, buf->count);
     pthread_cond_signal(&buf->only_full);
     pthread_cond_signal(&buf->not_full);
     pthread_mutex_unlock(&buf->buf_mut);
@@ -284,7 +285,7 @@ void setsize(CBuffer* buf, int n)
         }
         else
         {
-            buf->pending_min_limit = MAX(buf->pending_min_limit, n); // Update to the next minimum if there are still setsize operations
+            buf->pending_min_limit = MIN(buf->pending_min_limit, n); // Update to the next minimum if there are still setsize operations
             printf("[DEBUG] setsize operations still in progress: %d\n", buf->setsizes_in_progress);
         }
         pthread_mutex_unlock(&buf->buf_mut);
@@ -293,13 +294,13 @@ void setsize(CBuffer* buf, int n)
 
 int append(CBuffer* buf, CBuffer* buf2)
 {
-        //printf("\nappending\n");
+        printf("\nappending\n");
     pthread_mutex_lock(&buf->buf_mut);
     pthread_mutex_lock(&buf2->buf_mut);
     int transferred = 0;
     int available = buf->capacity - _count_nolock(buf);
     int to_transfer = MIN(available, _count_nolock(buf2));
-    //printf("[DEBUG] Available space in buf1: %d, items in buf2: %d, will transfer: %d\n",available, _count_nolock(buf2), to_transfer);
+    printf("[DEBUG] Available space in buf1: %d, items in buf2: %d, will transfer: %d\n",available, _count_nolock(buf2), to_transfer);
     while(transferred < to_transfer)
     {
         void* el = buf2->buffer[buf2->tail];
@@ -320,7 +321,7 @@ int append(CBuffer* buf, CBuffer* buf2)
         pthread_cond_signal(&buf2->only_full);
         pthread_cond_signal(&buf2->not_full);
     }
-        //printf("\nappended\n");
+        printf("\nappended\n");
     return transferred;
 }
 
